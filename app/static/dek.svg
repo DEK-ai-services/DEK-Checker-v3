@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   viewBox="0 0 479.06 161.57"
+   width="479.06px"
+   height="161.57px"
+   preserveAspectRatio="xMinYMin meet"
+   version="1.1"
+   id="svg6"
+   sodipodi:docname="dek.svg"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs10" />
+  <sodipodi:namedview
+     id="namedview8"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1" />
+  <g
+     fill="#e2001a"
+     id="g4">
+    <path
+       d="M318.34 160.82h50.98v-47.77l13.85-14.33 38.02 62.1h56.84l-60.16-98.2L478.03.75h-60.25l-48.46 50.06V.75h-50.98v160.07zM168.25 160.82h131.13v-38.96h-79.7V97.15h64.79V60.41h-64.79V39.05h76.58V.75H168.25v160.07zM52.46 120.3V41.27h14.47c24.27 0 33.4 10.68 33.4 39.63 0 29.83-8.68 39.4-34.06 39.4H52.46zM1.03 160.82h52.54c24.93 0 43.86-.45 57.44-6.68 26.94-12.02 40.97-36.96 40.97-73.24 0-34.51-11.13-58.11-33.39-71.02C103.89 1.42 86.09.75 63.15.75H1.03v160.07z"
+       id="path2" />
+  </g>
+</svg>
