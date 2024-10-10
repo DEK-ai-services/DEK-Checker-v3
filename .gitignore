@@ -5,9 +5,9 @@
 
 
 # Vypnout při plném sdílení
-*.env
-New_DEK_checker_venv/ 
-dekchecker3-0-80a4d5fa1c92.json
+#*.env
+#New_DEK_checker_venv/ 
+#dekchecker3-0-80a4d5fa1c92.json
 
 
 
