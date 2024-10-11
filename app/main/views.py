@@ -85,52 +85,6 @@ async def save_gpt_response():
         log_info(f"GPT response saved successfully. ID: {gpt_response.id}")
     return jsonify({'status': 'success', 'message': 'GPT response saved', 'response_id': gpt_response.id})
 
-@main.route('/process_with_prompt', methods=['POST'])
-async def process_with_prompt():
-    data = request.json
-    gpt_response_id = data['gpt_response_id']
-    new_prompt = data['prompt']
-
-    async with current_app.async_session() as session:
-        gpt_response = await session.get(GptResponse, gpt_response_id)
-        if not gpt_response:
-            return jsonify({'status': 'error', 'message': 'GPT response not found'}), 404
-
-        latest_version = await session.execute(
-            select(GptResponseVersion)
-            .filter_by(gpt_response_id=gpt_response_id)
-            .order_by(GptResponseVersion.version_number.desc())
-        )
-        latest_version = latest_version.scalar_one_or_none()
-
-        if not latest_version:
-            return jsonify({'status': 'error', 'message': 'No versions found for this GPT response'}), 404
-
-        new_analysis = await process_with_new_prompt(
-            gpt_response.product_name,
-            latest_version.improved_text,
-            new_prompt
-        )
-
-        new_version = GptResponseVersion(
-            gpt_response_id=gpt_response_id,
-            version_number=latest_version.version_number + 1,
-            improved_text=new_analysis['improved_text'],
-            changes=json.dumps(new_analysis['changes']),
-            prompt=new_prompt
-        )
-        session.add(new_version)
-        await session.commit()
-
-    return jsonify({
-        'status': 'success',
-        'message': 'New version created',
-        'new_version': {
-            'version_number': new_version.version_number,
-            'improved_text': new_version.improved_text,
-            'changes': json.loads(new_version.changes)
-        }
-    })
 
 @main.route('/update_gpt_response_status', methods=['POST'])
 async def update_gpt_response_status():
@@ -293,26 +247,6 @@ async def get_gpt_responses():
     log_info(f"Fetched {len(response_data)} GPT responses for backlog")
     return jsonify({'status': 'success', 'responses': response_data})
 
-@main.route('/delete_gpt_response/<int:response_id>', methods=['DELETE'])
-async def delete_gpt_response(response_id):
-    async with current_app.async_session() as session:
-        response = await session.get(GptResponse, response_id)
-        if response:
-            await session.delete(response)
-            await session.commit()
-            return jsonify({'status': 'success', 'message': 'GPT odpověď byla úspěšně smazána.'})
-        return jsonify({'status': 'error', 'message': 'Požadovaná GPT odpověď nebyla nalezena.'}), 404
-
-@main.route('/update_gpt_response/<int:response_id>', methods=['PUT'])
-async def update_gpt_response(response_id):
-    data = request.json
-    async with current_app.async_session() as session:
-        response = await session.get(GptResponse, response_id)
-        if response:
-            response.improved_text = data['improved_text']
-            await session.commit()
-            return jsonify({'status': 'success', 'message': 'GPT odpověď byla úspěšně aktualizována.'})
-        return jsonify({'status': 'error', 'message': 'Požadovaná GPT odpověď nebyla nalezena.'}), 404
 
 @main.route('/add_sheet', methods=['POST'])
 async def add_sheet():
@@ -394,11 +328,6 @@ async def update_sheet_data():
         log_error(f"Chyba při aktualizaci dat tabulky: {str(e)}", exc_info=True)
         return jsonify({'error': f'Omlouváme se, ale nepodařilo se aktualizovat data: {str(e)}'}), 500
 
-@main.route('/sync_sheet/<sheet_id>', methods=['POST'])
-async def sync_sheet(sheet_id):
-    result = await sync_sheet_data(sheet_id)
-    return jsonify(result)
-
 @main.route('/get_assistants', methods=['GET'])
 def get_assistants():
     assistants = current_app.config['OPENAI_ASSISTANTS']
@@ -425,28 +354,6 @@ async def save_feedback():
         log_error(f"Chyba při ukládání feedbacku: {str(e)}", exc_info=True)
         return jsonify({'status': 'error', 'message': 'Nepodařilo se uložit feedback'}), 500
 
-@main.route('/get_backlog', methods=['GET'])
-async def get_backlog():
-    try:
-        async with current_app.async_session() as session:
-            # Získáme všechny GptResponse záznamy
-            result = await session.execute(select(GptResponse).order_by(GptResponse.analysis_date.desc()))
-            responses = result.scalars().all()
-
-            # Připravíme data pro frontend
-            backlog_data = [{
-                'id': response.id,
-                'product_name': response.product_name,
-                'original_text': response.original_text,
-                'improved_text': response.improved_text,
-                'analysis_date': response.analysis_date.isoformat(),
-                'changes': response.changes
-            } for response in responses]
-
-        return jsonify(backlog_data)
-    except Exception as e:
-        log_error(f"Chyba při získávání dat pro Backlog: {str(e)}", exc_info=True)
-        return jsonify({'error': 'Nepodařilo se načíst data pro Backlog'}), 500
 
 @main.route('/analyze', methods=['POST', 'GET'])
 def analyze():
@@ -488,38 +395,6 @@ def analyze():
         log_error(f"Error in analysis for sheet {sheet_id}: {str(e)}", exc_info=True)
         return jsonify({'error': 'We apologize, but the analysis could not be performed. Please check the parameters and try again.'}), 500
 
-@main.route('/analyze_stream', methods=['POST'])
-def analyze_stream():
-    try:
-        data = request.json
-        sheet_id = data['sheet_id']
-        product_name_column = data['product_name_column']
-        analysis_column = data['analysis_column']
-        assistant_id = data['assistant_id']
-
-        log_info(f"Starting streaming analysis for sheet_id: {sheet_id}")
-
-        def generate():
-            for result in analyze_with_assistant_stream(product_name_column, analysis_column, assistant_id, sheet_id):
-                yield f"data: {json.dumps(result)}\n\n"
-
-        return Response(stream_with_context(generate()), content_type='text/event-stream')
-
-    except Exception as e:
-        log_error(f"Error in streaming analysis: {str(e)}", exc_info=True)
-        return jsonify({'error': 'Nepodařilo se provést streamovanou analýzu'}), 500
-
-@main.route('/check_text', methods=['POST'])
-def check_text():
-    text = request.json.get('text')
-    if not text:
-        return jsonify({'error': 'No text provided'}), 400
-    
-    result = analyze_text_with_assistant(text)
-    if result is None:
-        return jsonify({'error': 'An error occurred during text analysis'}), 500
-    
-    return jsonify({'result': result})
 
 @main.route('/analyze_text', methods=['POST'])
 def analyze_text():
