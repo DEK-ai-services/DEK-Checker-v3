@@ -15,7 +15,7 @@ import os
 from sqlalchemy.orm import selectinload
 from openai import OpenAI
 
-main = Blueprint('main', __name__)
+# main = Blueprint('main', __name__) 
 
 def clean_text(text):
     # Nahrazení značek <change> jejich obsahem
@@ -42,8 +42,27 @@ def favicon():
         mimetype='image/vnd.microsoft.icon'
     )
 
+
 @main.route('/save_gpt_response', methods=['POST'])
 async def save_gpt_response():
+
+    """
+    Kontrola sheet_id:
+        Pokud v requestu chybí sheet_id, metoda vrátí odpověď s kódem 400 a chybovou zprávou.
+        Pokud je sheet_id přítomný, provede se dotaz na tabulku GoogleSheet, aby se ověřilo, zda tato tabulka existuje v databázi.
+        Pokud Google Sheet s daným sheet_id neexistuje, vrátí se odpověď s kódem 404 a chybovou zprávou.
+    
+    Vytvoření a uložení záznamu GptResponse:
+        Pokud Google Sheet existuje, vytvoří se nový záznam GptResponse, který zahrnuje detaily analýzy (např. produktový název, původní text a další).
+        Tento záznam je přidán do databázové session a po zavolání session.flush() je připraven pro trvalé uložení.
+    
+    Vytvoření verze odpovědi (GptResponseVersion):
+        Následně je vytvořena verze odpovědi (GptResponseVersion), která obsahuje verzi textu generovaného GPT, včetně popisu změn a promptu.
+        Tento záznam je rovněž přidán do session.
+    
+    Jakmile jsou oba záznamy (odpověď a její verze) přidány, změny jsou trvale uloženy do databáze pomocí session.commit().
+    """
+
     data = request.json
     log_info(f"Received data for saving GPT response: {data}")
     
@@ -88,6 +107,13 @@ async def save_gpt_response():
 
 @main.route('/update_gpt_response_status', methods=['POST'])
 async def update_gpt_response_status():
+
+    """
+    Validace vstupních dat: Pokud response_id není uveden nebo status obsahuje neplatnou hodnotu, vrátí se chyba 400.
+    Načtení odpovědi GPT: Na základě response_id se asynchronně načte odpověď GPT z databáze.
+    Aktualizace stavu: Pokud odpověď existuje, její stav se aktualizuje na hodnotu uvedenou v požadavku a změny se uloží do databáze.
+    """
+
     data = request.json
     response_id = data.get('response_id')
     new_status = data.get('status')
@@ -108,9 +134,17 @@ async def update_gpt_response_status():
         else:
             print(f"GPT response not found for response_id={response_id}")  # Debug log
             return jsonify({'status': 'error', 'message': 'GPT response not found'}), 404
-        
+
+
 @main.route('/get_last_responses', methods=['GET'])
 async def get_last_responses():
+
+    """
+    Načtou se odpovědi typu GptResponse, které odpovídají daným parametrům, jsou ve stavu 'pending', a jsou seřazeny podle data analýzy sestupně
+    Odpovědi jsou rozděleny na stránky podle parametrů page a per_page
+    Odpověď obsahuje informace o jednotlivých odpovědích, včetně verze odpovědi, vylepšeného textu, změn a dalších informací o analýze
+    """
+
     sheet_id = request.args.get('sheet_id')
     product_name_column = request.args.get('product_name_column')
     analysis_column = request.args.get('analysis_column')
@@ -186,9 +220,13 @@ async def get_last_responses():
     except Exception as e:
         log_error(f"Error getting last responses: {str(e)}", exc_info=True)
         return jsonify({'status': 'error', 'message': 'Internal server error'}), 500
-    
-@main.route('/get-saved-sheets')
+
+
+@main.route('/get-saved-sheets', methods=['GET'])
 async def get_saved_sheets():
+    """
+    Vrací seznam všech uložených záznamů z tabulky GoogleSheet ve formátu JSON
+    """
     try:
         async with current_app.async_session() as session:
             result = await session.execute(select(GoogleSheet))
@@ -206,6 +244,11 @@ async def get_saved_sheets():
     
 @main.route('/get_gpt_responses', methods=['GET'])
 async def get_gpt_responses():
+
+    """
+    Načítá všechny položky z tabulky GptResponse včetně jejich verzí z tabulky GptResponseVersion a vrací je v podobě strukturovaného JSON
+    """
+
     log_info("Fetching GPT responses for backlog")
     async with current_app.async_session() as session:
         result = await session.execute(select(GptResponse).order_by(GptResponse.analysis_date.desc()))
@@ -250,6 +293,11 @@ async def get_gpt_responses():
 
 @main.route('/add_sheet', methods=['POST'])
 async def add_sheet():
+
+    """
+    Přidá nový záznam do tabulky GoogleSheet podle poskytnutého JSONu v POST requestu
+    """
+
     try:
         data = request.json
         new_sheet = GoogleSheet(sheet_id=data['sheet_id'], name=data['name'], url=data['url'])
@@ -262,11 +310,20 @@ async def add_sheet():
         log_error(f"Chyba při přidávání tabulky: {str(e)}", exc_info=True)
         return jsonify({'error': 'Omlouváme se, ale nepodařilo se přidat tabulku. Zkontrolujte prosím zadané údaje a zkuste to znovu.'}), 500
 
-@main.route('/get_sheet_data', methods=['POST'])
+
+@main.route('/get_sheet_data', methods=['GET'])
 def get_sheet_data_route():
-    data = request.json
-    sheet_id = data['sheet_id']
-    
+
+    """
+    Vrací data z tabulky podle zadaného sheet_id. 
+    Odpověď obsahuje jak načtená data, tak další informace jako sloupce, varování a datum poslední aktualizace
+    Volá funkci get_sheet_data()
+        - Definovaná v utils/sheet_utils.py
+        - Funkce načítá data z Google Sheets
+
+    """
+
+    sheet_id = request.args.get('sheet_id')
     try:
         log_info(f"Načítání dat tabulky pro sheet_id: {sheet_id}")
         df, _, warning, last_updated = get_sheet_data(sheet_id)
