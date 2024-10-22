@@ -1,49 +1,17 @@
 from flask import Blueprint, render_template, request, jsonify, current_app, Response, stream_with_context, send_from_directory
-from .models import GoogleSheet, SheetData, GptResponse, GptResponseVersion
+from ...models import GoogleSheet, SheetData, GptResponse, GptResponseVersion
 from sqlalchemy.future import select
 from sqlalchemy import and_, desc, func
-from .utils.sheet_utils import get_sheet_data, update_google_sheet
+from sqlalchemy.orm import joinedload, selectinload
+from ...utils.gpt_utils import analyze_products
+from ...utils.error_handlers import log_error, log_info, log_debug, log_warning
 from datetime import datetime
-from .utils.gpt_utils import analyze_products, process_with_new_prompt, analyze_text_with_assistant
-from .utils.error_handlers import log_error, log_info, log_debug, log_warning
-from config import Config
-from sqlalchemy import desc
-from sqlalchemy.orm import joinedload
-import json
-import re
-import os
-from sqlalchemy.orm import selectinload
 from openai import OpenAI
-
-# main = Blueprint('main', __name__) 
-
-def clean_text(text):
-    # Nahrazení značek <change> jejich obsahem
-    text = re.sub(r'<change[^>]*>(.*?)</change>', r'\1', text)
-    
-    # Odstranění dalších HTML značek, pokud existují
-    text = re.sub(r'<[^>]*>', '', text)
-    
-    # Odstranění nadbytečných mezer
-    text = re.sub(r'\s+', ' ', text).strip()
-    
-    return text
-
-@main.route('/')
-def index():
-    log_debug("Rendering index page")
-    return render_template('index.html')
-
-@main.route('/favicon.ico')
-def favicon():
-    return send_from_directory(
-        os.path.join(current_app.root_path, 'static'),
-        'favicon.ico', 
-        mimetype='image/vnd.microsoft.icon'
-    )
+import json
+import os
 
 
-@main.route('/save_gpt_response', methods=['POST'])
+@gpt.route('/save_gpt_response', methods=['POST'])
 async def save_gpt_response():
 
     """
@@ -105,7 +73,7 @@ async def save_gpt_response():
     return jsonify({'status': 'success', 'message': 'GPT response saved', 'response_id': gpt_response.id})
 
 
-@main.route('/update_gpt_response_status', methods=['POST'])
+@gpt.route('/update_gpt_response_status', methods=['POST'])
 async def update_gpt_response_status():
 
     """
@@ -136,13 +104,13 @@ async def update_gpt_response_status():
             return jsonify({'status': 'error', 'message': 'GPT response not found'}), 404
 
 
-@main.route('/get_last_responses', methods=['GET'])
+@gpt.route('/get_last_responses', methods=['GET'])
 async def get_last_responses():
 
     """
-    Načtou se odpovědi typu GptResponse, které odpovídají daným parametrům, jsou ve stavu 'pending', a jsou seřazeny podle data analýzy sestupně
-    Odpovědi jsou rozděleny na stránky podle parametrů page a per_page
-    Odpověď obsahuje informace o jednotlivých odpovědích, včetně verze odpovědi, vylepšeného textu, změn a dalších informací o analýze
+    Načtou se záznamy z tabulky GptResponse, které odpovídají daným parametrům - jsou ve stavu 'pending', a jsou seřazeny podle data analýzy sestupně
+    Záznamy jsou rozděleny na stránky podle parametrů page a per_page
+    Záznam obsahuje informace o jednotlivých odpovědích, včetně verze odpovědi, vylepšeného textu, změn a dalších informací o analýze
     """
 
     sheet_id = request.args.get('sheet_id')
@@ -222,27 +190,7 @@ async def get_last_responses():
         return jsonify({'status': 'error', 'message': 'Internal server error'}), 500
 
 
-@main.route('/get-saved-sheets', methods=['GET'])
-async def get_saved_sheets():
-    """
-    Vrací seznam všech uložených záznamů z tabulky GoogleSheet ve formátu JSON
-    """
-    try:
-        async with current_app.async_session() as session:
-            result = await session.execute(select(GoogleSheet))
-            sheets = result.scalars().all()
-        return jsonify([{
-            'id': sheet.id, 
-            'sheet_id': sheet.sheet_id, 
-            'name': sheet.name, 
-            'url': sheet.url
-        } for sheet in sheets])
-    except Exception as e:
-        log_error(f"Chyba při načítání uložených tabulek: {str(e)}", exc_info=True)
-        return jsonify({'error': 'Omlouváme se, ale nepodařilo se načíst uložené tabulky. Zkuste to prosím znovu později.'}), 500
-
-    
-@main.route('/get_gpt_responses', methods=['GET'])
+@gpt.route('/get_gpt_responses', methods=['GET'])
 async def get_gpt_responses():
 
     """
@@ -291,129 +239,25 @@ async def get_gpt_responses():
     return jsonify({'status': 'success', 'responses': response_data})
 
 
-@main.route('/add_sheet', methods=['POST'])
-async def add_sheet():
-
-    """
-    Přidá nový záznam do tabulky GoogleSheet podle poskytnutého JSONu v POST requestu
-    """
-
-    try:
-        data = request.json
-        new_sheet = GoogleSheet(sheet_id=data['sheet_id'], name=data['name'], url=data['url'])
-        async with current_app.async_session() as session:
-            session.add(new_sheet)
-            await session.commit()
-        log_info(f"Nová tabulka přidána: {data['name']} ({data['sheet_id']})")
-        return jsonify({'status': 'success', 'message': 'Tabulka byla úspěšně přidána.'})
-    except Exception as e:
-        log_error(f"Chyba při přidávání tabulky: {str(e)}", exc_info=True)
-        return jsonify({'error': 'Omlouváme se, ale nepodařilo se přidat tabulku. Zkontrolujte prosím zadané údaje a zkuste to znovu.'}), 500
-
-
-@main.route('/get_sheet_data', methods=['GET'])
-def get_sheet_data_route():
-
-    """
-    Vrací data z tabulky podle zadaného sheet_id. 
-    Odpověď obsahuje jak načtená data, tak další informace jako sloupce, varování a datum poslední aktualizace
-    Volá funkci get_sheet_data()
-        - Definovaná v utils/sheet_utils.py
-        - Funkce načítá data z Google Sheets
-
-    """
-
-    sheet_id = request.args.get('sheet_id')
-    try:
-        log_info(f"Načítání dat tabulky pro sheet_id: {sheet_id}")
-        df, _, warning, last_updated = get_sheet_data(sheet_id)
-        log_info(f"Data tabulky úspěšně načtena. Rozměry: {df.shape}")
-
-        return jsonify({
-            'status': 'success',
-            'data': df.to_dict('records'),
-            'columns': df.columns.tolist(),
-            'warning': warning,
-            'last_updated': last_updated.isoformat() if last_updated else None
-        })
-    except Exception as e:
-        log_error(f"Chyba při načítání dat tabulky pro {sheet_id}: {str(e)}", exc_info=True)
-        return jsonify({'status': 'error', 'message': 'Omlouváme se, ale nepodařilo se načíst data tabulky. Zkontrolujte prosím připojení a zkuste to znovu.'}), 500
-    
-
-@main.route('/update_sheet_data', methods=['POST'])
-async def update_sheet_data():
-    try:
-        data = request.json
-        sheet_id = data.get('sheet_id')
-        row_index = data.get('row_index')
-        column_name = data.get('column_name')
-        new_value = clean_text(data.get('new_value', ''))
-
-        await update_google_sheet(sheet_id, row_index, column_name, new_value)
-
-        async with current_app.async_session() as session:
-            google_sheet = await session.execute(select(GoogleSheet).filter_by(sheet_id=sheet_id))
-            google_sheet = google_sheet.scalar_one_or_none()
-            
-            if google_sheet:
-                sheet_data = await session.execute(
-                    select(SheetData).filter_by(
-                        google_sheet_id=google_sheet.id,
-                        row_index=row_index,
-                        column_name=column_name
-                    )
-                )
-                sheet_data = sheet_data.scalar_one_or_none()
-
-                if sheet_data:
-                    sheet_data.data = new_value
-                    sheet_data.last_updated = datetime.utcnow()
-                else:
-                    new_sheet_data = SheetData(
-                        google_sheet_id=google_sheet.id,
-                        row_index=row_index,
-                        column_name=column_name,
-                        data=new_value
-                    )
-                    session.add(new_sheet_data)
-
-                await session.commit()
-
-        return jsonify({'status': 'success', 'message': 'Data byla úspěšně aktualizována.'})
-    except Exception as e:
-        log_error(f"Chyba při aktualizaci dat tabulky: {str(e)}", exc_info=True)
-        return jsonify({'error': f'Omlouváme se, ale nepodařilo se aktualizovat data: {str(e)}'}), 500
-
-@main.route('/get_assistants', methods=['GET'])
-def get_assistants():
-    assistants = current_app.config['OPENAI_ASSISTANTS']
-    return jsonify(list(assistants.items()))
-
-@main.route('/save_feedback', methods=['POST'])
-async def save_feedback():
-    try:
-        data = request.json
-        result = data['result']
-        feedback = data['feedback']
-
-        async with current_app.async_session() as session:
-            new_feedback = Feedback(
-                gpt_response_id=result['id'],
-                feedback_text=feedback,
-                created_at=datetime.utcnow()
-            )
-            session.add(new_feedback)
-            await session.commit()
-
-        return jsonify({'status': 'success', 'message': 'Feedback byl úspěšně uložen'})
-    except Exception as e:
-        log_error(f"Chyba při ukládání feedbacku: {str(e)}", exc_info=True)
-        return jsonify({'status': 'error', 'message': 'Nepodařilo se uložit feedback'}), 500
-
-
-@main.route('/analyze', methods=['POST', 'GET'])
+@gpt.route('/analyze', methods=['POST', 'GET'])
 def analyze():
+
+    """
+    Uvnitř těla tohoto endpointu je definován generátor generate(), který streamuje výsledky analýzy
+        - uvnitř těla generátoru se volá funkce analyze_products()
+            - Definovaná v utils/gpt_utils.py
+            - Tato funkce nejdříve získá data z Google sheets (pomocí funkce get_sheet_data())
+            - Poté pro tyto data zavolá funkci analyze_with_assistant()
+                - Tato funkce vytvoří instanci klienta OpenAI pomocí API klíče uloženého v config souboru aplikace
+                - Vytvoří se nové vlákno (thread) - sloužící jako kontejner pro zprávy, které budou součástí interakce
+                - Do vlákna se přidá zpráva, která obsahuje název produktu a text, který má být analyzován
+                - Asistent se spustí na nově vytvořeném vlákně - samotný proces analýzi
+                - Funkce neustále kontroluje stav analýzy (zda úspěšně doběhla nebo skončila s chybou)
+                - Po dokončení analýzy získá funkce poslední zprávu odeslanou asistentem
+                - Tato zpráva je přeparsovaná do JSONu a odeslaná v odpovědi
+    Endpoint využívá streamovanou odpověď pomocí funkce Response(), která postupně posílá data klientovi v reálném čase, místo toho, aby poslal všechna data najednou po jejich kompletním zpracování 
+    """
+
     try:
         if request.method == 'POST':
             data = request.json
@@ -453,8 +297,15 @@ def analyze():
         return jsonify({'error': 'We apologize, but the analysis could not be performed. Please check the parameters and try again.'}), 500
 
 
-@main.route('/analyze_text', methods=['POST'])
+@gpt.route('/analyze_text', methods=['POST'])
 def analyze_text():
+
+    """
+    Tento endpoint slouží pro provedení textové analýzy s využitím asistenta OpenAI
+    Přijímá text, který má být analyzován a ID assistenta, který má analýzu provést
+    Endpoint vrací výsledek analýzy
+    """
+
     data = request.json
     text = data.get('text')
     assistant_id = data.get('assistant_id')

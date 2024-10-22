@@ -1,7 +1,7 @@
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from config import config
-from .utils.error_handlers import setup_logging, register_error_handlers, log_info, log_error
+from .utils.error_handlers import setup_logging, register_error_handlers
 
 db = SQLAlchemy()
 
@@ -14,7 +14,9 @@ def create_app(config_name):
     setup_logging(app)
     register_error_handlers(app)
 
-    from .main import main
+    from .blueprints import main, gpt, sheets
     app.register_blueprint(main)
+    app.register_blueprint(gpt)
+    app.register_blueprint(sheets)
 
     return app
