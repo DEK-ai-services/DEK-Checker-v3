@@ -5,7 +5,6 @@ from sqlalchemy import and_, desc, func
 from sqlalchemy.orm import joinedload, selectinload
 from ...utils.error_handlers import log_error, log_info, log_debug, log_warning
 from datetime import datetime
-from ....config import Config
 from openai import OpenAI
 import json
 import os
