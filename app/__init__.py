@@ -14,7 +14,9 @@ def create_app(config_name):
     setup_logging(app)
     register_error_handlers(app)
 
-    from .blueprints import main, gpt, sheets
+    from .blueprints.main import main
+    from .blueprints.gpt import gpt
+    from .blueprints.sheets import sheets
     app.register_blueprint(main)
     app.register_blueprint(gpt)
     app.register_blueprint(sheets)

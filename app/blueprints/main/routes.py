@@ -1,4 +1,5 @@
 from flask import Blueprint, render_template, request, jsonify, current_app, Response, stream_with_context, send_from_directory
+from . import main
 from ...models import GoogleSheet, SheetData, GptResponse, GptResponseVersion
 from sqlalchemy.future import select
 from sqlalchemy import and_, desc, func
