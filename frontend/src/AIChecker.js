@@ -27,7 +27,7 @@ import {
     Alert,
 } from "@mui/material";
 import { styled } from "@mui/material/styles";
-import { SnackbarContext } from "./SnackbarContext";
+import { SnackbarContext } from "./App";
 import AnalysisResult from "./AnalysisResult";
 import AnalysisInfo from "./AnalysisInfo";
 import ProgressBar from "./ProgressBar";

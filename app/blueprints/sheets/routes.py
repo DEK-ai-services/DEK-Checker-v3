@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, jsonify, current_app, Response, stream_with_context, send_from_directory
+from flask import Blueprint, request, jsonify, g, Response
 from . import sheets
 from ...models import GoogleSheet, SheetData, GptResponse, GptResponseVersion
 from sqlalchemy.future import select
@@ -29,7 +29,7 @@ async def get_saved_sheets():
     Vrací seznam všech uložených záznamů z tabulky GoogleSheet ve formátu JSON
     """
     try:
-        async with current_app.async_session() as session:
+        async with g.async_session as session:
             result = await session.execute(select(GoogleSheet))
             sheets = result.scalars().all()
         return jsonify([{
@@ -53,7 +53,7 @@ async def add_sheet():
     try:
         data = request.json
         new_sheet = GoogleSheet(sheet_id=data['sheet_id'], name=data['name'], url=data['url'])
-        async with current_app.async_session() as session:
+        async with g.async_session as session:
             session.add(new_sheet)
             await session.commit()
         log_info(f"Nová tabulka přidána: {data['name']} ({data['sheet_id']})")
@@ -118,7 +118,7 @@ async def update_sheet_data():
 
         await update_google_sheet(sheet_id, row_index, column_name, new_value)
 
-        async with current_app.async_session() as session:
+        async with g.async_session as session:
             google_sheet = await session.execute(select(GoogleSheet).filter_by(sheet_id=sheet_id))
             google_sheet = google_sheet.scalar_one_or_none()
             

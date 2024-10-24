@@ -6,7 +6,6 @@ import { styled } from "@mui/system";
 
 import HomePage from "./HomePage";
 import AIChecker from "./AIChecker";
-import TextChecker from "./TextChecker";
 import "react-draft-wysiwyg/dist/react-draft-wysiwyg.css";
 
 export const SnackbarContext = createContext();
@@ -26,7 +25,6 @@ const App = () => {
         message: "",
         severity: "info",
     });
-    const [isTextCheckerOpen, setIsTextCheckerOpen] = useState(false);
 
     useEffect(() => {
         fetchSheets();
@@ -90,21 +88,11 @@ const App = () => {
         setSnackbar({ ...snackbar, open: false });
     };
 
-    const handleOpenTextChecker = () => {
-        setIsTextCheckerOpen(true);
-    };
-
-    const handleCloseTextChecker = () => {
-        setIsTextCheckerOpen(false);
-    };
-
     return (
         <ThemeProvider theme={theme}>
             <SnackbarContext.Provider value={showSnackbar}>
                 <StyledPaper>
-                    {isTextCheckerOpen ? (
-                        <TextChecker onClose={handleCloseTextChecker} />
-                    ) : selectedSheetId ? (
+                    {selectedSheetId ? (
                         <AIChecker
                             sheetId={selectedSheetId}
                             onBack={() => setSelectedSheetId(null)}
@@ -114,7 +102,6 @@ const App = () => {
                             sheets={sheets}
                             onSelectSheet={handleSelectSheet}
                             onAddSheet={handleAddSheet}
-                            onCheckText={handleOpenTextChecker}
                         />
                     )}
                     <Snackbar

@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, jsonify, current_app, Response, stream_with_context, send_from_directory
+from flask import Blueprint, render_template, request, jsonify, g, Response, send_from_directory
 from . import main
 from ...models import GoogleSheet, SheetData, GptResponse, GptResponseVersion
 from sqlalchemy.future import select
@@ -20,7 +20,7 @@ def index():
 @main.route('/favicon.ico')
 def favicon():
     return send_from_directory(
-        os.path.join(current_app.root_path, 'static'),
+        os.path.join(g.root_path, 'static'),
         'favicon.ico', 
         mimetype='image/vnd.microsoft.icon'
     )
@@ -33,7 +33,7 @@ def get_assistants():
     Z configu aplikace získá seznam OPENAI asistentů
     """
 
-    assistants = current_app.config['OPENAI_ASSISTANTS']
+    assistants = g.config['OPENAI_ASSISTANTS']
     return jsonify(list(assistants.items()))
 
 
@@ -49,7 +49,7 @@ async def save_feedback():
         result = data['result']
         feedback = data['feedback']
 
-        async with current_app.async_session() as session:
+        async with g.async_session as session:
             new_feedback = Feedback(
                 gpt_response_id=result['id'],
                 feedback_text=feedback,

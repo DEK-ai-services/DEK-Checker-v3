@@ -13,6 +13,7 @@ class Config:
     GOOGLE_SHEETS_CREDENTIALS_FILE = path.join(basedir,'dekchecker3-0-67d427b19f19.json')
 
     SQLALCHEMY_DATABASE_URI = f'postgresql://{environ.get('DB_USER')}:{environ.get('DB_USER_PASS')}@localhost/{environ.get('DB_NAME')}'
+    SQLALCHEMY_DATABASE_URI_ASYNC = f'postgresql+asyncpg://{environ.get('DB_USER')}:{environ.get('DB_USER_PASS')}@localhost/{environ.get('DB_NAME')}'
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
     OPENAI_ASSISTANTS = {

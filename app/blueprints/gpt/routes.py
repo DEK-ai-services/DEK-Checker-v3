@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, jsonify, current_app, Response, stream_with_context, send_from_directory
+from flask import Blueprint, request, jsonify, g, Response, current_app
 from . import gpt
 from ...models import GoogleSheet, SheetData, GptResponse, GptResponseVersion
 from sqlalchemy.future import select
@@ -35,7 +35,7 @@ async def save_gpt_response():
     data = request.json
     log_info(f"Received data for saving GPT response: {data}")
     
-    async with current_app.async_session() as session:
+    async with g.async_session as session:
         if 'sheet_id' not in data:
             log_error("Missing sheet_id in request data")
             return jsonify({'status': 'error', 'message': 'Missing sheet_id in request data'}), 400
@@ -93,7 +93,7 @@ async def update_gpt_response_status():
         print(f"Invalid data: response_id={response_id}, new_status={new_status}")  # Debug log
         return jsonify({'status': 'error', 'message': 'Invalid data'}), 400
     
-    async with current_app.async_session() as session:
+    async with g.async_session as session:
         gpt_response = await session.get(GptResponse, response_id)
         if gpt_response:
             gpt_response.status = new_status
@@ -125,7 +125,7 @@ async def get_last_responses():
         return jsonify({'status': 'error', 'message': 'Missing required parameters'}), 400
 
     try:
-        async with current_app.async_session() as session:
+        async with g.async_session as session:
             google_sheet = await session.execute(select(GoogleSheet).filter_by(sheet_id=sheet_id))
             google_sheet = google_sheet.scalar_one_or_none()
             
@@ -199,7 +199,7 @@ async def get_gpt_responses():
     """
 
     log_info("Fetching GPT responses for backlog")
-    async with current_app.async_session() as session:
+    async with g.async_session as session:
         result = await session.execute(select(GptResponse).order_by(GptResponse.analysis_date.desc()))
         responses = result.scalars().all()
 
@@ -314,7 +314,7 @@ def analyze_text():
     if not text or not assistant_id:
         return jsonify({'error': 'Chybí text nebo ID asistenta'}), 400
 
-    client = OpenAI(api_key=Config.OPENAI_API_KEY)
+    client = OpenAI(api_key=current_app.config.get("OPENAI_API_KEY"))
 
     try:
         thread = client.beta.threads.create()
