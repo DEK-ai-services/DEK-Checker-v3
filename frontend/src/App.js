@@ -1,5 +1,4 @@
 ﻿import React, { useState, useEffect, useCallback, createContext } from "react";
-import { createRoot } from "react-dom/client";
 import { Paper, Snackbar } from "@mui/material";
 import { Alert } from "@mui/material";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
@@ -112,7 +111,7 @@ const App = () => {
                         />
                     ) : (
                         <HomePage
-                            sheets={0}
+                            sheets={sheets}
                             onSelectSheet={handleSelectSheet}
                             onAddSheet={handleAddSheet}
                             onCheckText={handleOpenTextChecker}

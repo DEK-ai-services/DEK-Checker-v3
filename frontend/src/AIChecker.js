@@ -1,10 +1,4 @@
-﻿import React, {
-    useState,
-    useEffect,
-    useMemo,
-    useContext,
-    useCallback,
-} from "react";
+﻿import React, { useState, useEffect, useContext, useCallback } from "react";
 import {
     Button,
     Select,
@@ -87,26 +81,15 @@ const AIChecker = ({ sheetId, onBack }) => {
     const [warning, setWarning] = useState("");
     const [assistants, setAssistants] = useState([]);
     const [selectedAssistant, setSelectedAssistant] = useState("");
-    const [sortOrder, setSortOrder] = useState("asc");
-    const [filterValue, setFilterValue] = useState("");
-    const [selectedColumns, setSelectedColumns] = useState([
-        "Číslo položky",
-        "Popis",
-        "www",
-    ]);
     const [checkedRows, setCheckedRows] = useState({});
     const [visibleResults, setVisibleResults] = useState({});
     const [backlogResponses, setBacklogResponses] = useState([]);
-    const [aiMasterPrompt, setAiMasterPrompt] = useState("");
     const showSnackbar = useContext(SnackbarContext);
     const [lastResponses, setLastResponses] = useState([]);
     const [feedbackPopupOpen, setFeedbackPopupOpen] = useState(false);
     const [currentFeedbackResult, setCurrentFeedbackResult] = useState(null);
     const [visibleResultsCount, setVisibleResultsCount] = useState(10);
     const [totalExpectedResponses, setTotalExpectedResponses] = useState(0);
-    const [currentPage, setCurrentPage] = useState(1);
-    const [totalPages, setTotalPages] = useState(1);
-    const [totalResponses, setTotalResponses] = useState(0);
 
     useEffect(() => {
         fetchSheetData();
@@ -225,9 +208,6 @@ const AIChecker = ({ sheetId, onBack }) => {
 
                 if (data.status === "success") {
                     setLastResponses(data.responses);
-                    setCurrentPage(data.page);
-                    setTotalPages(data.total_pages);
-                    setTotalResponses(data.total);
                 } else {
                     throw new Error(
                         data.message || "Nepodařilo se načíst poslední odpovědi"
@@ -271,10 +251,6 @@ const AIChecker = ({ sheetId, onBack }) => {
             } else {
                 console.warn("Could not find 'Název' column");
             }
-            const defaultColumns = ["Číslo položky", "Popis", "www"].filter(
-                (col) => columns.includes(col)
-            );
-            setSelectedColumns(defaultColumns);
         }
     }, [columns]);
 
@@ -607,7 +583,6 @@ const AIChecker = ({ sheetId, onBack }) => {
                 selectedVersion.improved_text ||
                 result.product_description?.improved ||
                 "";
-            const cleanedText = cleanText(improvedText);
 
             const response = await fetch("/update_sheet_data", {
                 method: "POST",
@@ -618,7 +593,7 @@ const AIChecker = ({ sheetId, onBack }) => {
                     sheet_id: sheetId,
                     row_index: result.row_index,
                     column_name: analysisColumn,
-                    new_value: cleanedText,
+                    new_value: improvedText,
                 }),
             });
 
@@ -645,7 +620,7 @@ const AIChecker = ({ sheetId, onBack }) => {
                 const newData = [...prevData];
                 const rowToUpdate = newData[result.row_index];
                 if (rowToUpdate) {
-                    rowToUpdate[analysisColumn] = cleanedText;
+                    rowToUpdate[analysisColumn] = improvedText;
                 }
                 return newData;
             });
@@ -874,29 +849,6 @@ const AIChecker = ({ sheetId, onBack }) => {
             </StyledTableContainer>
         );
     };
-
-    const handleSaveProduct = async (editedProduct) => {
-        // TODO: Implement saving changes to the backend
-        console.log("Saving edited product:", editedProduct);
-    };
-
-    const sortedAndFilteredData = useMemo(() => {
-        return sheetData
-            .filter(
-                (product) =>
-                    product["Číslo položky"].toString().includes(filterValue) ||
-                    product["Název"]
-                        .toLowerCase()
-                        .includes(filterValue.toLowerCase())
-            )
-            .sort((a, b) => {
-                if (sortOrder === "asc") {
-                    return a["Číslo položky"].localeCompare(b["Číslo položky"]);
-                } else {
-                    return b["Číslo položky"].localeCompare(a["Číslo položky"]);
-                }
-            });
-    }, [sheetData, sortOrder, filterValue]);
 
     const handleCheckboxChange = (rowIndex) => {
         setCheckedRows((prev) => ({
